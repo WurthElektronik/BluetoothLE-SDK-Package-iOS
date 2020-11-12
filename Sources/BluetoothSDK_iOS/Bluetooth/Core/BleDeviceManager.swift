@@ -1,16 +1,16 @@
+// __          ________        _  _____
+// \ \        / /  ____|      (_)/ ____|
+//  \ \  /\  / /| |__      ___ _| (___   ___  ___
+//   \ \/  \/ / |  __|    / _ \ |\___ \ / _ \/ __|
+//    \  /\  /  | |____  |  __/ |____) | (_) \__ \
+//     \/  \/   |______|  \___|_|_____/ \___/|___/
 //
-//  BleDeviceManager.swift
-//  HortiCoolture
-//
-//  Created by Vitalij Mast on 14.06.19.
-//  Copyright © 2019 Synergetik GmbH. All rights reserved.
-//
+// Copyright © 2020 Würth Elektronik GmbH & Co. KG.
 
 import Foundation
 import UIKit
 import CoreBluetooth
 import os.log
-
 
 /// Bluetooth device manager protocol. Used to notify delegate about device state changes.
 @available(iOS 10.0, *)
@@ -42,9 +42,22 @@ public protocol BleDeviceManagerDelegate : NSObjectProtocol {
     /// - Parameters:
     ///   - manager: Associated bluetooth device manager instance.
     ///   - device: Reported bluetooth device instance.
-    func deviceManager(_ manager: BleDeviceManager, didDidFailToConnectToDevice device: BleDevice)
-}
+    func deviceManager(_ manager: BleDeviceManager, didFailToConnectToDevice device: BleDevice)
 
+    /// Callback wich is called when a device has been updated.
+    ///
+    /// - Parameters:
+    ///   - manager: Associated bluetooth device manager instance.
+    ///   - device: Reported bluetooth device instance.
+    func deviceManager(_ manager: BleDeviceManager, didUpdateDevice device: BleDevice)
+
+    /// Callback wich is called when a discovered device has been lost.
+    ///
+    /// - Parameters:
+    ///   - manager: Associated bluetooth device manager instance.
+    ///   - device: Reported bluetooth device instance.
+    func deviceManager(_ manager: BleDeviceManager, didLoseDevice device: BleDevice)
+}
 
 @available(iOS 10.0, *)
 extension BleDeviceManagerDelegate {
@@ -58,10 +71,15 @@ extension BleDeviceManagerDelegate {
     public func deviceManager(_ manager: BleDeviceManager, didDisconnectFromDevice device: BleDevice){
     }
     
-    public func deviceManager(_ manager: BleDeviceManager, didDidFailToConnectToDevice device: BleDevice) {
+    public func deviceManager(_ manager: BleDeviceManager, didFailToConnectToDevice device: BleDevice) {
+    }
+
+    public func deviceManager(_ manager: BleDeviceManager, didUpdateDevice device: BleDevice) {
+    }
+
+    public func deviceManager(_ manager: BleDeviceManager, didLoseDevice device: BleDevice) {
     }
 }
-
 
 extension Notification.Name {
     
@@ -86,7 +104,6 @@ extension Notification.Name {
     /// Bluetooth device manager broadcast notification center name for 'deviceManagerDidUpdateSelectedDevice'.
     public static let bleDeviceManagerDidUpdateSelectedDevice = Notification.Name("notificationBleDeviceManagerDidUpdateSelectedDevice")
 }
-
 
 /// Bluetooth device manager base implementation. Used to enumarate avaialble bluetooth devices.
 @available(iOS 10.0, *)
@@ -135,7 +152,6 @@ open class BleDeviceManager : NSObject, CBCentralManagerDelegate {
         }
     }
     
-    
     // MARK: Members
     
     /// Default low level bluetooth central manager instance.
@@ -166,7 +182,6 @@ open class BleDeviceManager : NSObject, CBCentralManagerDelegate {
             }
         }
     }
-    
     
     /// Associated device class type.
     ///
@@ -210,11 +225,10 @@ open class BleDeviceManager : NSObject, CBCentralManagerDelegate {
     public var selectedDevices : [UUID] = []
     
     
-    /// Default consturctor
+    /// Default constructor
     required public override init() {
         super.init()
     }
-    
     
     /// Search for the assoiciated bluetooth device identified by given peripheral instance.
     ///
@@ -286,7 +300,6 @@ open class BleDeviceManager : NSObject, CBCentralManagerDelegate {
     ///
     /// - Parameter index: List index of the device object to be removed.
     public func removeDevice(at index:Int) {
-        
         guard let device = self.devices[safe: index] else {
             return
         }
@@ -296,8 +309,8 @@ open class BleDeviceManager : NSObject, CBCentralManagerDelegate {
         }
         
         self.devices.remove(at: index)
-        
-         self.notificationCenter?.post(name: .bleDeviceManagerDidRemoveDevice, object: self, userInfo: self.notificationUserInfo(forDevice: device))
+        delegate?.deviceManager(self, didLoseDevice: device)
+        self.notificationCenter?.post(name: .bleDeviceManagerDidRemoveDevice, object: self, userInfo: self.notificationUserInfo(forDevice: device))
     }
     
     /// Removes a device from the internal list identified by given instance.
@@ -313,7 +326,6 @@ open class BleDeviceManager : NSObject, CBCentralManagerDelegate {
     
     /// Remove all devices from the internal list except demo devices.
     public func clearDevices() {
-        
         for (index, _) in self.devices.enumerated().reversed() {
             guard index > self.demoDeviceCount else {
                 return
@@ -328,7 +340,7 @@ open class BleDeviceManager : NSObject, CBCentralManagerDelegate {
     /// - Parameters:
     ///   - peripheral: Reference bluetooth peripheral.
     ///   - error: Error information instance. Can be nil if none.
-    /// - Returns: Dictonary
+    /// - Returns: Dictionary
     public func notificationUserInfo(forPeripheral peripheral: CBPeripheral, _ error: Error? = nil) -> [AnyHashable: Any] {
         return self.notificationUserInfo(forDevice: self.findDevice(wherePeripheral: peripheral, false)!, error)
     }
@@ -338,7 +350,7 @@ open class BleDeviceManager : NSObject, CBCentralManagerDelegate {
     /// - Parameters:
     ///   - device: Reference bluetotoh device.
     ///   - error: Error information instance. Can be nil if none.
-    /// - Returns: Dictonary
+    /// - Returns: Dictionary
     public func notificationUserInfo(forDevice device: BleDevice, _ error: Error? = nil) -> [AnyHashable: Any] {
         var dict = Dictionary<String, Any?>(minimumCapacity: 3)
       
@@ -435,6 +447,32 @@ open class BleDeviceManager : NSObject, CBCentralManagerDelegate {
             }
         }
     }
+
+    /// Determines if device should be discovered with corresponding Received signal strength indicator (RSSI) value.
+    ///
+    /// - Parameter RSSI: Discovered RSSI value.
+    open func shouldDiscover(rssi RSSI: NSNumber) -> Bool {
+        return true
+    }
+
+    /// Determines if already discovered devices should be removed of discovery list caused by bad Received signal strength indicator (RSSI) measures.
+    ///
+    /// - Parameter badRSSICount: Count of bad RSSI values.
+    open func shouldRemoveFromDiscovery(badRSSICount: Int) -> Bool {
+        return false
+    }
+
+    /// Updates the Received signal strength indicator (RSSI) value of a BleDevice.
+    ///
+    /// - Parameters:
+    ///   - device: The corresponding BleDevice of the discovered peripheral.
+    ///   - rssi: The current received signal strength indicator (RSSI) of the peripheral, in decibels.
+    ///   - badRSSICount: Count of bad RSSI values. Will reset if sufficient RSSI is measured
+    private func updateRSSI(device: BleDevice, rssi RSSI: NSNumber, badRSSICount: Int = 0) {
+        device.rssi = RSSI
+        device.badRssiCount = badRSSICount
+        delegate?.deviceManager(self, didUpdateDevice: device)
+    }
     
     // MARK: Notifications
     
@@ -473,27 +511,50 @@ open class BleDeviceManager : NSObject, CBCentralManagerDelegate {
             os_log_ble("BleDeviceManager.centralManagerDidDiscover: unexpected central instance reference", type: .error)
             return
         }
-        
-        let found : Bool = true
-        
-        // TODO: optional filter device here
-        
-        if found {
-            var device : BleDevice? = self.findDevice(wherePeripheral: peripheral)
-            
-            if device == nil {
-                device = self.addDevice(forPeripheral: peripheral)
-                
-                self.delegate?.deviceManager(self, didDiscoverDevice: device!)
-            
-                self.notificationCenter?.post(name: .bleDeviceManagerDidDiscoverDevice, object: self, userInfo: self.notificationUserInfo(forDevice: device!))
-            }
-            else {
-                self.notificationCenter?.post(name: .bleDeviceManagerDidUpdateDevice, object: self, userInfo: self.notificationUserInfo(forDevice: device!))
-            }
-            
-            device?.retriggerAdvertisementTimeoutTimer()
+
+        if let device : BleDevice = findDevice(wherePeripheral: peripheral) {
+            onExistingDeviceDiscovery(device: device, rssi: RSSI)
+        } else {
+            onNewDeviceDiscovery(peripheral: peripheral, rssi: RSSI)
         }
+    }
+
+    /// Will be called when a new device was discovered.
+    ///
+    /// - Parameters:
+    ///   - peripheral: The discovered peripheral.
+    ///   - rssi: The current received signal strength indicator (RSSI) of the peripheral, in decibels.
+    private func onNewDeviceDiscovery(peripheral: CBPeripheral, rssi RSSI: NSNumber) {
+        guard shouldDiscover(rssi: RSSI) else {
+            os_log_ble("BleDeviceManager.onNewDeviceDiscovery: Should not discover for RSSI (%d)", type: .info, RSSI.intValue)
+            return
+        }
+        let device = addDevice(forPeripheral: peripheral)
+
+        delegate?.deviceManager(self, didDiscoverDevice: device)
+        notificationCenter?.post(name: .bleDeviceManagerDidDiscoverDevice, object: self, userInfo: self.notificationUserInfo(forDevice: device))
+
+        updateRSSI(device: device, rssi: RSSI)
+        device.retriggerAdvertisementTimeoutTimer()
+    }
+
+    /// Will be called when an existing device was discovered.
+    ///
+    /// - Parameters:
+    ///   - device: The corresponding BleDevice of the discovered peripheral.
+    ///   - rssi: The current received signal strength indicator (RSSI) of the peripheral, in decibels.
+    private func onExistingDeviceDiscovery(device: BleDevice, rssi RSSI: NSNumber) {
+        if shouldDiscover(rssi: RSSI) {
+            updateRSSI(device: device, rssi: RSSI)
+            notificationCenter?.post(name: .bleDeviceManagerDidUpdateDevice, object: self, userInfo: notificationUserInfo(forDevice: device))
+        } else {
+            updateRSSI(device: device, rssi: RSSI, badRSSICount: device.badRssiCount + 1)
+            if shouldRemoveFromDiscovery(badRSSICount: device.badRssiCount) {
+                os_log_ble("BleDeviceManager.onExistingDeviceDiscovery: Should remove for discovery for RSSI (%d), badRSSICount (%d)", type: .info, RSSI.intValue, device.badRssiCount)
+                removeDevice(device)
+            }
+        }
+        device.retriggerAdvertisementTimeoutTimer()
     }
     
     public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
@@ -540,7 +601,7 @@ open class BleDeviceManager : NSObject, CBCentralManagerDelegate {
         
         if let device = self.findDevice(wherePeripheral: peripheral, false) {
             device.didFailToConnect()
-            self.delegate?.deviceManager(self, didDidFailToConnectToDevice: device)
+            self.delegate?.deviceManager(self, didFailToConnectToDevice: device)
             self.notificationCenter?.post(name: .bleDeviceManagerDidFailToConnect, object: self, userInfo: self.notificationUserInfo(forDevice: device, error))
         }
     }

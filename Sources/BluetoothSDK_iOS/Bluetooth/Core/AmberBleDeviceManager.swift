@@ -1,10 +1,11 @@
+// __          ________        _  _____
+// \ \        / /  ____|      (_)/ ____|
+//  \ \  /\  / /| |__      ___ _| (___   ___  ___
+//   \ \/  \/ / |  __|    / _ \ |\___ \ / _ \/ __|
+//    \  /\  /  | |____  |  __/ |____) | (_) \__ \
+//     \/  \/   |______|  \___|_|_____/ \___/|___/
 //
-//  AmberBleDeviceManager.swift
-//  HortiCoolture
-//
-//  Created by Vitalij Mast on 14.06.19.
-//  Copyright © 2019 Synergetik GmbH. All rights reserved.
-//
+// Copyright © 2020 Würth Elektronik GmbH & Co. KG.
 
 import Foundation
 import CoreBluetooth
@@ -48,5 +49,19 @@ open class AmberBleDeviceManager : BleDeviceManager {
         get {
             return AmberBleDevice.self
         }
+    }
+
+    open override func shouldDiscover(rssi RSSI: NSNumber) -> Bool {
+        guard let minimumRSSI = deviceClass.minimumRSSI else {
+            return true
+        }
+        return RSSI.intValue >= minimumRSSI
+    }
+
+    open override func shouldRemoveFromDiscovery(badRSSICount: Int) -> Bool {
+        guard let maximumBadRSSICount = deviceClass.maximumBadRSSICount else {
+            return false
+        }
+        return badRSSICount >= maximumBadRSSICount
     }
 }

@@ -1,15 +1,15 @@
+// __          ________        _  _____
+// \ \        / /  ____|      (_)/ ____|
+//  \ \  /\  / /| |__      ___ _| (___   ___  ___
+//   \ \/  \/ / |  __|    / _ \ |\___ \ / _ \/ __|
+//    \  /\  /  | |____  |  __/ |____) | (_) \__ \
+//     \/  \/   |______|  \___|_|_____/ \___/|___/
 //
-//  BleDevice.swift
-//  HortiCoolture
-//
-//  Created by Vitalij Mast on 14.06.19.
-//  Copyright © 2019 Synergetik GmbH. All rights reserved.
-//
+// Copyright © 2020 Würth Elektronik GmbH & Co. KG.
 
 import Foundation
 import CoreBluetooth
 import os.log
-
 
 extension Notification.Name {
     
@@ -66,7 +66,6 @@ extension BleDeviceSettingsDelegate {
     }
 }
 
-
 /// Bluetooth device delegate protocol. Used to notify bluetooth device instances about state changes.
 public protocol BleDeviceDelegate : NSObjectProtocol {
     
@@ -76,10 +75,12 @@ public protocol BleDeviceDelegate : NSObjectProtocol {
     /// Callback notification function wich is called when a device disconnects.
     func didDisconnect()
     
-    /// Callback notification function wich is called when the device faisl to connect.
+    /// Callback notification function wich is called when the device fails to connect.
     func didFailToConnect()
-}
 
+    /// Callback notification function wich is called when the device has read Received signal strength indicator (RSSI).
+    func didReadRSSI()
+}
 
 /// Abstract bluetooth device class. Should be reimplemented in derviered class.
 @available(iOS 10.0, *)
@@ -97,6 +98,24 @@ open class BleDevice : NSObject, CBPeripheralDelegate, BleDeviceDelegate {
     
     /// Associated service uuid list, wich can be handled by this device class, if any, else nil.
     public class var serviceUUIDs: [CBUUID]? {
+        get {
+            return nil
+        }
+    }
+
+    /// Minimum Received signal strength indicator (RSSI) value for bluetooth discovery, wich can be handled by this device class, if any, else nil.
+    ///
+    /// - Remark: If value is below minimum a new device will not be discovered. For already discovered devices the badRSSICount will increase by one.
+    public class var minimumRSSI: Int? {
+        get {
+            return nil
+        }
+    }
+
+    /// Maximum count for bad Received signal strength indicator (RSSI) measurement, wich can be handled by this device class, if any, else nil.
+    ///
+    /// - Remark: If maximum is reached for a discovered bluetooth device, this device will be removed from discovery.
+    public class var maximumBadRSSICount: Int? {
         get {
             return nil
         }
@@ -142,7 +161,7 @@ open class BleDevice : NSObject, CBPeripheralDelegate, BleDeviceDelegate {
     }
     
     /// Associated device name if any, else short device identifier stirng.
-    public var name : String {
+    open var name : String {
         get {
             return self.peripheral?.name ?? self.uuidShortString
         }
@@ -185,6 +204,26 @@ open class BleDevice : NSObject, CBPeripheralDelegate, BleDeviceDelegate {
             return self.state == .connected
         }
     }
+
+    /// Retrieves the current MTU (Maximum Transmission Unit).
+    /// - Remark: MTU can not be changed from iOS side. 182 bytes seems to be currently the maximum.
+    public var mtu: Int? {
+        get {
+            guard let value = peripheral?.maximumWriteValueLength(for: .withoutResponse) else {
+                return nil
+            }
+            /// The returned mtu for the payload is MTU - 1, cause the header parameter takes 1 byte.
+            return value - 1
+        }
+    }
+
+    /// The Received Signal Strength Indicator (RSSI), in decibels, of the bluetooth device.
+    public var rssi: NSNumber?
+
+    /// Count for bad Received signal strength indicator (RSSI) values. Will be reset if RSSI is bigger or equal to minimumRSSI.
+    ///
+    /// - Remark: Used only if minimumRSSI is set.
+    public var badRssiCount = 0
     
     /// Determinates if the device should automatically reconect.
     public var shouldReconnect : Bool {
@@ -238,8 +277,7 @@ open class BleDevice : NSObject, CBPeripheralDelegate, BleDeviceDelegate {
     /// Restarts advertisement timer.
     public func retriggerAdvertisementTimeoutTimer() {
         self.advertisementTimeoutTimer?.invalidate()
-        self.advertisementTimeoutTimer = Timer.scheduledTimer(timeInterval: self.advertisementTimeout, target: self,
-                                                              selector: #selector(didAdvertisementTimeout), userInfo: nil, repeats: false)
+        self.advertisementTimeoutTimer = Timer.scheduledTimer(timeInterval: self.advertisementTimeout, target: self, selector: #selector(didAdvertisementTimeout), userInfo: nil, repeats: false)
     }
 
     /// Advertisement timer callback function. Fires notification center message.
@@ -251,20 +289,35 @@ open class BleDevice : NSObject, CBPeripheralDelegate, BleDeviceDelegate {
         
         self.notificationCenter?.post(name: .bleDeviceDidTimeoutAdvertisement, object: self)
     }
-    
-    
+
+    /// Tells the delegate that retrieving the value of the peripheral’s current Received Signal Strength Indicator (RSSI) succeeded.
+    public func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
+        self.rssi = RSSI
+        didReadRSSI()
+    }
+
+    /// Retrieves the Received signal strength indicator (RSSI) of a connected Bluetooth Device. Result will be updated in didReadRSSI callback.
+    ///
+    /// Connected Bluetooth Devices will no longer be discovered in didDiscover method of BleDeviceManager. Therefore RSSI has to be refreshed manually.
+    public func refreshRSSI() {
+        peripheral?.readRSSI()
+    }
+
     // MARK: BleDeviceDelegate
     
-    public func didConnect() {
+    open func didConnect() {
         // terminate advertisement timer
         // we are connected and want not to trigger anymore
         self.advertisementTimeoutTimer?.invalidate()
         self.advertisementTimeoutTimer = nil
     }
     
-    public func didDisconnect() {
+    open func didDisconnect() {
     }
     
-    public func didFailToConnect() {
+    open func didFailToConnect() {
+    }
+
+    open func didReadRSSI() {
     }
 }

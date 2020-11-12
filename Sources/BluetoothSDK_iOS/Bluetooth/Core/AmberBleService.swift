@@ -1,10 +1,11 @@
+// __          ________        _  _____
+// \ \        / /  ____|      (_)/ ____|
+//  \ \  /\  / /| |__      ___ _| (___   ___  ___
+//   \ \/  \/ / |  __|    / _ \ |\___ \ / _ \/ __|
+//    \  /\  /  | |____  |  __/ |____) | (_) \__ \
+//     \/  \/   |______|  \___|_|_____/ \___/|___/
 //
-//  AmberBleService.swift
-//  HortiCoolture
-//
-//  Created by Vitalij Mast on 14.06.19.
-//  Copyright © 2019 Synergetik GmbH. All rights reserved.
-//
+// Copyright © 2020 Würth Elektronik GmbH & Co. KG.
 
 import Foundation
 import CoreBluetooth
@@ -13,39 +14,39 @@ import os.log
 
 /// Amber bluetotoh device service protocol. Used to notify delegate about new incoming data.
 public protocol AmberBleServiceDelegate : NSObjectProtocol {
-    
-    func dataReceived(_ incomingData: Data)
-}
 
+    /// Will be called when new data from bluetooth device is received.
+    ///
+    /// - Parameter incomingData: Received raw data.
+    func dataReceived(_ incomingData: Data)
+
+    /// Will be called when Received signal strength indicator (RSSI) was read.
+    func didReadRSSI()
+}
 
 /// Amber bluetooth service class. Handles incoming and outgoing data provided by the SSP like bluetooth protocol.
 @available(iOS 10.0, *)
 open class AmberBleService : BleService {
     
     // MARK: Shared static
-    
-    /// Payload header type definition for user data.
-    public static let kHeaderTypeUserData = 0x01
-    
-    /// Associated service UUID as string.
-    public static let kUartServiceUUID = "6e400001-c352-11e5-953d-0002a5d5c51b"
-    
-    /// Associated characteristics transmit UUID as string.
-    public static let kUartServiceTransmitCharacteristicUUID = "6e400002-c352-11e5-953d-0002a5d5c51b"
-    
-    /// Associated characteristics receive UUID as string.
-    public static let kUartServiceReceiveCharacteristicUUID = "6e400003-c352-11e5-953d-0002a5d5c51b"
-    
-    
+
+    /// Associated UartConfig. As default AmberUartConfig is set.
+    public static var uartConfig: UartConfig.Type = AmberUartConfig.self
+
     /// Associated service UUID as characteristics class.
-    public static let uartServiceUUID = CBUUID(string: kUartServiceUUID)
+    public static var uartServiceUUID: CBUUID {
+        return CBUUID(string: uartConfig.kUartServiceUUID)
+    }
     
      /// Associated characteristics transmit UUID characteristics class.
-    public static let uartServiceTransmitCharacteristicUUID = CBUUID(string: kUartServiceTransmitCharacteristicUUID)
+    public static var uartServiceTransmitCharacteristicUUID: CBUUID {
+        return CBUUID(string: uartConfig.kUartServiceTransmitCharacteristicUUID)
+    }
     
     /// Associated characteristics receive UUID characteristics class.
-    public static let uartServiceReceiveCharacteristicUUID = CBUUID(string: kUartServiceReceiveCharacteristicUUID)
-    
+    public static var uartServiceReceiveCharacteristicUUID: CBUUID {
+        return CBUUID(string: uartConfig.kUartServiceReceiveCharacteristicUUID)
+    }
     
     /// Retrieves supported service uuids.
     ///
@@ -70,12 +71,10 @@ open class AmberBleService : BleService {
         return nil
     }
     
-    
     // MARK: Class implementation
     
     /// Holds the service delegate if any.
     public weak var delegate : AmberBleServiceDelegate? = nil
-    
     
     /// Associated transmit characteristics instance if any.
     public private(set) weak var transmitDataCharacteristic : CBCharacteristic?
@@ -98,6 +97,11 @@ open class AmberBleService : BleService {
         self.receiveDataCharacteristic = nil
         super.init(withDevice: device)
     }
+
+    /// Called when Received signal strength indicator (RSSI) was read.
+    public func didReadRSSI() {
+        delegate?.didReadRSSI()
+    }
     
     /// Called when new data received.
     ///
@@ -106,9 +110,7 @@ open class AmberBleService : BleService {
     public func dataReceived(_ incomingData: Data) {
         if let delegate = self.delegate {
             delegate.dataReceived(incomingData)
-        }
-        else
-        {
+        } else {
             let dataString = incomingData.hexDescription("-")
             os_log_ble("AmberBleService.dataReceived: no delegate, skipped data %s", type: .info, dataString)
         }
@@ -124,10 +126,8 @@ open class AmberBleService : BleService {
             return
         }
         
-        var frameData = Data(bytes:[AmberBleService.kHeaderTypeUserData], count: 1)
+        var frameData = Data(bytes:[AmberBleService.uartConfig.kHeaderTypeUserData], count: 1)
         frameData.append(data)
-        
-        //os_log_ble("AmberBleService.transmit: data %s", type: .debug, frameData.hexDescription())
         
         self.device.peripheral?.writeValue(frameData, for: transmitDataCharacteristic, type: CBCharacteristicWriteType.withResponse)
     }
@@ -165,8 +165,7 @@ open class AmberBleService : BleService {
         if (characteristic.uuid == AmberBleService.uartServiceTransmitCharacteristicUUID) {
             self.transmitDataCharacteristic = characteristic
         }
-        else
-        if (characteristic.uuid == AmberBleService.uartServiceReceiveCharacteristicUUID) {
+        else if (characteristic.uuid == AmberBleService.uartServiceReceiveCharacteristicUUID) {
             self.receiveDataCharacteristic = characteristic
         }
     }
@@ -195,7 +194,7 @@ open class AmberBleService : BleService {
         
         let headerType = incomingData[0]
         
-        guard headerType == AmberBleService.kHeaderTypeUserData else {
+        guard headerType == AmberBleService.uartConfig.kHeaderTypeUserData else {
             os_log_ble("AmberBleService.didUpdate: data skipped, unknown header type 0x%02x", type: .debug, headerType)
             return
         }
@@ -203,4 +202,5 @@ open class AmberBleService : BleService {
         incomingData.removeFirst()
         self.dataReceived(incomingData)
     }
+
 }

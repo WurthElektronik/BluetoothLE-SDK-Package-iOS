@@ -1,15 +1,15 @@
+// __          ________        _  _____
+// \ \        / /  ____|      (_)/ ____|
+//  \ \  /\  / /| |__      ___ _| (___   ___  ___
+//   \ \/  \/ / |  __|    / _ \ |\___ \ / _ \/ __|
+//    \  /\  /  | |____  |  __/ |____) | (_) \__ \
+//     \/  \/   |______|  \___|_|_____/ \___/|___/
 //
-//  AmberBleDevice.swift
-//  HortiCoolture
-//
-//  Created by Vitalij Mast on 14.06.19.
-//  Copyright © 2019 Synergetik GmbH. All rights reserved.
-//
+// Copyright © 2020 Würth Elektronik GmbH & Co. KG.
 
 import Foundation
 import CoreBluetooth
 import os.log
-
 
 /// Generic bluetooth device class to handle amber serial protocol service.
 @available(iOS 10.0, *)
@@ -26,8 +26,19 @@ open class AmberBleDevice : BleDevice {
             return AmberBleService.serviceUUIDs()
         }
     }
-    
-    
+
+    public override class var minimumRSSI: Int? {
+        get {
+            return AmberBleService.uartConfig.minimumRSSI
+        }
+    }
+
+    public override class var maximumBadRSSICount: Int? {
+        get {
+            return AmberBleService.uartConfig.maximumBadRSSICount
+        }
+    }
+
     // MARK: Class implementation
     
     /// Holds the associated serial service instance.
@@ -46,22 +57,24 @@ open class AmberBleDevice : BleDevice {
         self.advertisementTimeout = 3.0
         self.serialService = AmberBleService(withDevice: self)
     }
-    
-    
+
     // MARK: BleDeviceDelegate
     
-    public override func didConnect() {
+    open override func didConnect() {
         self.serialService?.deviceDidConnect()
     }
     
-    public override func didDisconnect() {
+    open override func didDisconnect() {
         self.serialService?.deviceDidDisconnect()
     }
     
-    public override func didFailToConnect() {
+    open override func didFailToConnect() {
         self.didDisconnect()
     }
-    
+
+    open override func didReadRSSI() {
+        self.serialService?.didReadRSSI()
+    }
     
     // MARK: CBPeripheralDelegate
     
@@ -85,8 +98,6 @@ open class AmberBleDevice : BleDevice {
         
         if !foundService {
             os_log_ble("AmberBleDevice.didDiscoverServices: desired service not found", type: .error)
-            
-            // TODO: disconnect again?
         }
     }
     
@@ -110,14 +121,10 @@ open class AmberBleDevice : BleDevice {
         
         if serialService.transmitDataCharacteristic == nil {
             os_log_ble("AmberBleDevice.didDiscoverCharacteristicsFor: desired transmit characteristic not found", type: .error)
-            
-            // TODO: disconnect again?
         }
         
         if serialService.receiveDataCharacteristic == nil {
             os_log_ble("AmberBleDevice.didDiscoverCharacteristicsFor: desired receive characteristic not found", type: .error)
-            
-            // TODO: disconnect again?
         }
     }
     

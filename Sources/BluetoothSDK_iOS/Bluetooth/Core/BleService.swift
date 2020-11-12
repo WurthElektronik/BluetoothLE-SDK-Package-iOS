@@ -1,15 +1,15 @@
+// __          ________        _  _____
+// \ \        / /  ____|      (_)/ ____|
+//  \ \  /\  / /| |__      ___ _| (___   ___  ___
+//   \ \/  \/ / |  __|    / _ \ |\___ \ / _ \/ __|
+//    \  /\  /  | |____  |  __/ |____) | (_) \__ \
+//     \/  \/   |______|  \___|_|_____/ \___/|___/
 //
-//  BleService.swift
-//  HortiCoolture
-//
-//  Created by Vitalij Mast on 14.06.19.
-//  Copyright © 2019 Synergetik GmbH. All rights reserved.
-//
+// Copyright © 2020 Würth Elektronik GmbH & Co. KG.
 
 import Foundation
 import CoreBluetooth
 import os.log
-
 
 /// Bluetooth service delegate class. Used to notify service about device changes and capabilities.
 public protocol BleServiceDelegate : NSObjectProtocol {
@@ -58,7 +58,6 @@ public protocol BleServiceDelegate : NSObjectProtocol {
     func didWrite(valueForCharacteristic characteristic: CBCharacteristic, _ error: Error?)
 }
 
-
 extension BleServiceDelegate {
    
     public func deviceDidConnect() {
@@ -84,7 +83,6 @@ extension BleServiceDelegate {
     }
 }
 
-
 /// Abstract bluetooth service class. Should be derivered with desired service processing functionality.
 @available(iOS 10.0, *)
 open class BleService : NSObject, BleServiceDelegate {
@@ -107,7 +105,6 @@ open class BleService : NSObject, BleServiceDelegate {
     public class func characteristicUUIDs(forService service: CBUUID) -> [CBUUID]? {
         return nil
     }
-    
     
     // MARK: Class implementation
     
